@@ -49,10 +49,14 @@ Everything Checker поддерживает несколько цветовых 
 
 Основные темы:
 
-- 🔵 Blue ![Blue](image/them_blue.png)
+- 🔵 Blue
+  ![Blue](images/them_blue.png)
 - 🟢 Green
+  ![Green](images/them_grean.png)
 - 🟠 Orange
+  ![Orange](images/them_orange.png)
 - 🟣 Purple
+  ![Purple](images/them_purpule.png)
 
 Переключение тем происходит прямо в программе с помощью кнопки **Theme**.
 
