@@ -49,7 +49,7 @@ Everything Checker поддерживает несколько цветовых 
 
 Основные темы:
 
-- 🔵 Blue (image/them_blue.png)
+- 🔵 Blue ![Blue](image/them_blue.png)
 - 🟢 Green
 - 🟠 Orange
 - 🟣 Purple
