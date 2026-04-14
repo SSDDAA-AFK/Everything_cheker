@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import threading
 import time
 import random
@@ -7,662 +7,264 @@ import requests
 import os
 import tempfile
 import hashlib
+import subprocess
+import re
 
-FOLDER = os.path.join(os.path.expanduser("~"), "Documents", "Checker")
+# Налаштування папок
+FOLDER = os.path.join(os.path.expanduser("~"), "Documents", "EverythingChecker")
 os.makedirs(FOLDER, exist_ok=True)
 THEME_FILE = os.path.join(FOLDER, "theme.txt")
 
 ICON_URL = "https://raw.githubusercontent.com/SSDDAA-AFK/Everything_cheker/main/icon.ico"
-ICON_PATH = os.path.join(tempfile.gettempdir(), "icon.ico")
-
-SCAN_LIST_URL = "https://github.com/SSDDAA-AFK/Everything_cheker/releases/download/v1.0/scanlist.txt"  # ← СЮДА СВОЙ URL
-SCAN_LIST_PATH = os.path.join(FOLDER, "scanlist.txt")
+ICON_PATH = os.path.join(tempfile.gettempdir(), "everything_icon.ico")
 
 FOUND_FILES = []
-SUSPICIOUS_FILES = []
-
-BG = "#2B1A12"
-CARD = "#3A2318"
-ACCENT = "#FD9B23"
-BAR = "#E28250"
-TEXT = "#FDF8EB"
-SUB = "#FCD19D"
+AI_SUSPECTS = []
 
 THEMES = {
-
-    "Orange": {
-        "BG": "#2B1A12",
-        "CARD": "#3A2318",
-        "ACCENT": "#FD9B23",
-        "BAR": "#E28250",
-        "TEXT": "#FDF8EB",
-        "SUB": "#FCD19D"
-    },
-
-    "Midnight Purple": {
-        "BG": "#0b0614",
-        "CARD": "#160b2e",
-        "ACCENT": "#a855f7",
-        "BAR": "#7c3aed",
-        "TEXT": "#ede9fe",
-        "SUB": "#c4b5fd"
-    },
-
-    "Ice Gray": {
-        "BG": "#0f1115",
-        "CARD": "#1c1f26",
-        "ACCENT": "#9ca3af",
-        "BAR": "#6b7280",
-        "TEXT": "#f9fafb",
-        "SUB": "#d1d5db"
-    },
-
-    "Red Alert": {
-        "BG": "#1a0404",
-        "CARD": "#2a0808",
-        "ACCENT": "#ef4444",
-        "BAR": "#dc2626",
-        "TEXT": "#fee2e2",
-        "SUB": "#fca5a5"
-    },
-
-    "Purple Neon": {
-        "BG": "#12001a",
-        "CARD": "#1f002b",
-        "ACCENT": "#c77dff",
-        "BAR": "#9d4edd",
-        "TEXT": "#f3e8ff",
-        "SUB": "#d0bfff"
-    },
-
-    "Forest": {
-        "BG": "#0f1f17",
-        "CARD": "#172f25",
-        "ACCENT": "#4ade80",
-        "BAR": "#22c55e",
-        "TEXT": "#ecfdf5",
-        "SUB": "#a7f3d0"
-    },
-
-    "Solar Light": {
-        "BG": "#faf08c",
-        "CARD": "#f2d86f",
-        "ACCENT": "#ca8a04",
-        "BAR": "#eab308",
-        "TEXT": "#422006",
-        "SUB": "#78350f"
-    }
+    "RustMe Orange": {"BG": "#1A110C", "CARD": "#261912", "ACCENT": "#FF8C00", "BAR": "#E67E22", "TEXT": "#F5F5F5", "SUB": "#BDC3C7"},
+    "Dark Purple": {"BG": "#0F0C1D", "CARD": "#1B172E", "ACCENT": "#9B59B6", "BAR": "#8E44AD", "TEXT": "#ECF0F1", "SUB": "#95A5A6"},
+    "Midnight Blue": {"BG": "#0B1117", "CARD": "#161B22", "ACCENT": "#58A6FF", "BAR": "#1F6FEB", "TEXT": "#C9D1D9", "SUB": "#8B949E"},
+    "Forest Green": {"BG": "#0D1111", "CARD": "#161C1C", "ACCENT": "#2ECC71", "BAR": "#27AE60", "TEXT": "#ECF0F1", "SUB": "#95A5A6"}
 }
 
-
-
 class LoaderApp:
-
     def __init__(self, root):
-
-        self.downloaded = False
         self.current_theme = self.load_theme()
-
-        self.total_files = 0
-        self.scanned_files = 0
-
+        self.is_scanning = False
         self.root = root
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.root.title("Everything Cheker V1.1")
-        self.root.geometry("460x280")
+        self.root.title("Everything Checker v2.0 | RUSTME EDITION")
+        self.root.geometry("500x380")
+        
         if self.download_icon():
-            self.root.iconbitmap(ICON_PATH)
+            try: self.root.iconbitmap(ICON_PATH)
+            except: pass
+            
         self.root.resizable(False, False)
-        self.root.configure(bg=BG)
+        theme = THEMES[self.current_theme]
+        self.root.configure(bg=theme["BG"])
 
-        self.card = tk.Frame(
-            root,
-            bg=CARD,
-            width=420,
-            height=240
-        )
-        self.card.place(relx=0.5, rely=0.5, anchor="center")
+        self.main_container = tk.Frame(root, bg=theme["BG"])
+        self.main_container.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Тень (подложка)
-        self.title_shadow = tk.Label(
-            self.card,
-            text="🧿 Hidden Files Scan",
-            font=("Segoe UI", 20, "bold"),
-            fg="#000000",
-            bg=CARD
-        )
-        self.title_shadow.place(x=22, y=12)
+        self.card = tk.Frame(self.main_container, bg=theme["CARD"], bd=0)
+        self.card.place(relx=0.5, rely=0.5, anchor="center", width=440, height=330)
 
-        # Основной заголовок
-        self.title = tk.Label(
-            self.card,
-            text="🧿 Hidden Files Scan",
-            font=("Segoe UI", 20, "bold"),
-            fg=ACCENT,
-            bg=CARD
-        )
-        self.title.place(x=20, y=10)
+        self.title = tk.Label(self.card, text="🛡️ RUSTME CHECKER", font=("Segoe UI", 18, "bold"), fg=theme["ACCENT"], bg=theme["CARD"])
+        self.title.pack(pady=(20, 10))
 
-        self.label = tk.Label(
-            self.card,
-            text="🔄 Loading check...",
-            bg=CARD,
-            fg=TEXT,
-            font=("Segoe UI", 12)
-        )
-        self.label.pack(pady=(45, 5))
+        self.label = tk.Label(self.card, text="Ready to protect your game", bg=theme["CARD"], fg=theme["TEXT"], font=("Segoe UI", 11))
+        self.label.pack(pady=5)
 
-        style = ttk.Style()
-        style.theme_use("clam")
+        self.style = ttk.Style()
+        self.style.theme_use("clam")
+        self.update_progressbar_style(theme)
 
-        style.configure(
-            "Main.Horizontal.TProgressbar",
-            background=BAR,
-            troughcolor=BG,
-            thickness=16,
-            bordercolor=ACCENT,
-            lightcolor=ACCENT,
-            darkcolor=BAR
-        )
-
-        self.progress = ttk.Progressbar(
-            self.card,
-            style="Main.Horizontal.TProgressbar",
-            orient="horizontal",
-            length=340,
-            mode="determinate"
-        )
+        self.progress = ttk.Progressbar(self.card, style="Main.Horizontal.TProgressbar", orient="horizontal", length=360, mode="determinate")
         self.progress.pack(pady=15)
 
-        self.status = tk.Label(
-            self.card,
-            text="⏳ Preparation...",
-            bg=CARD,
-            fg=SUB,
-            font=("Segoe UI", 10)
-        )
+        self.status = tk.Label(self.card, text="Waiting for start...", bg=theme["CARD"], fg=theme["SUB"], font=("Segoe UI", 9))
         self.status.pack()
 
-        self.theme_btn = tk.Button(
-            self.card,
-            text="🎨 Theme",
-            command=self.switch_theme,
-            bg=CARD,
-            fg=ACCENT,
-            font=("Segoe UI", 9, "bold"),
-            relief="raised",
-            bd=1,
-            cursor="hand2"
-        )
+        self.btn_frame = tk.Frame(self.card, bg=theme["CARD"])
+        self.btn_frame.pack(pady=10)
+
+        self.start_btn = tk.Button(self.btn_frame, text="🚀 START SCAN", command=self.start_scan_thread, bg=theme["ACCENT"], fg=theme["BG"], font=("Segoe UI", 10, "bold"), relief="flat", padx=15, cursor="hand2")
+        self.start_btn.pack(side="left", padx=5)
+
+        self.report_btn = tk.Button(self.btn_frame, text="📋 LAST REPORT", command=self.show_full_results, bg=theme["CARD"], fg=theme["SUB"], font=("Segoe UI", 10), relief="flat", bd=1, state="disabled", cursor="hand2")
+        self.report_btn.pack(side="left", padx=5)
+
+        self.theme_btn = tk.Button(self.card, text="🎨 SWITCH THEME", command=self.switch_theme, bg=theme["CARD"], fg=theme["SUB"], font=("Segoe UI", 9), relief="flat", cursor="hand2")
         self.theme_btn.pack(pady=5)
 
-        t = threading.Thread(target=self.stage1, daemon=True)
-        self.apply_theme(animated=False)
-        t.start()
+    def update_progressbar_style(self, theme):
+        self.style.configure("Main.Horizontal.TProgressbar", background=theme["BAR"], troughcolor=theme["BG"], bordercolor=theme["CARD"], lightcolor=theme["BAR"], darkcolor=theme["BAR"])
 
-    def on_close(self):
-        try:
-            self.root.destroy()
-        except:
-            pass
+    def start_scan_thread(self):
+        if self.is_scanning: return
+        self.is_scanning = True
+        self.start_btn.config(state="disabled", text="SCANNING...")
+        self.report_btn.config(state="disabled")
+        threading.Thread(target=self.run_pro_check, daemon=True).start()
 
-        os._exit(0)
+    def run_pro_check(self):
+        self.check_processes()
+        self.check_virtual_drives()
+        self.scan_critical_dirs()
+        self.check_obfuscated_configs()
+        self.check_rustme_specifics()
+        self.is_scanning = False
+        self.root.after(0, self.finish_scan)
 
-    def download_icon(self):
-
-        try:
-            r = requests.get(ICON_URL, timeout=10)
-
-            with open(ICON_PATH, "wb") as f:
-                f.write(r.content)
-
-            return True
-
-        except:
-            return False
-
-    def download_scan_list(self):
-
-        try:
-            r = requests.get(SCAN_LIST_URL, timeout=15)
-
-            with open(SCAN_LIST_PATH, "w", encoding="utf-8") as f:
-                f.write(r.text)
-
-            return True
-
-        except:
-            return False
-
-    def count_files(self):
-
-        count = 0
-
-        for root_dir, dirs, files in os.walk(os.path.expanduser("~")):
-            count += len(files)
-
-        self.total_files = count
-
-    def load_scan_list(self):
-
-        if not os.path.exists(SCAN_LIST_PATH):
-            return []
-
-        with open(SCAN_LIST_PATH, "r", encoding="utf-8") as f:
-            return [line.strip().lower() for line in f if line.strip()]
-
-    def scan_files(self):
-
-        self.root.after(0, lambda: self.label.config(
-            text="🔍 Start scanning..."
-        ))
-
-        targets = self.load_scan_list()
-
-        if not targets:
-            return
-
-        found = []
-
-        self.scanned_files = 0
-
-        for root_dir, dirs, files in os.walk(os.path.expanduser("~")):
-
-            for file in files:
-
-                self.scanned_files += 1
-
-                percent = int(
-                    (self.scanned_files / self.total_files) * 100
-                )
-
-                # Оновлюємо прогрес
-                self.root.after(0, lambda p=percent: (
-                    self.progress.config(value=p),
-                    self.status.config(text=f"Scanning: {p}%")
-                ))
-
-                name = file.lower()
-
-                if name in targets:
-                    full_path = os.path.join(root_dir, file)
-                    found.append(full_path)
-
+    def scan_critical_dirs(self):
+        self.root.after(0, lambda: self.label.config(text="📂 Scanning critical locations..."))
+        target_dirs = [
+            os.path.join(os.environ["APPDATA"], ".minecraft"),
+            os.path.join(os.environ["APPDATA"], "RustMe"),
+            os.path.join(os.environ["LOCALAPPDATA"], "Temp"),
+            os.path.join(os.path.expanduser("~"), "Downloads"),
+            os.path.join(os.path.expanduser("~"), "Desktop"),
+            os.path.join(os.path.expanduser("~"), "AppData", "Roaming", "Microsoft", "Windows", "Recent")
+        ]
+        keywords = ["akrien", "celestial", "deadcode", "expensive", "nurik", "zamora", "wild", "client", "hack", "cheat", "bypass", "loader", "inject", "hitbox", "reach", "killaura", "spoof", "spoofer"]
+        ignore_list = ["site-packages", "pyqt5", "geometryloaders", "discord", "unity", "steam", "anydesk", "tesseract", "setup", "midnait"]
+        
+        found_files = []
+        AI_SUSPECTS.clear()
+        valid_dirs = [d for d in target_dirs if os.path.exists(d)]
+        total_to_scan = sum(len(files) for d in valid_dirs for _, _, files in os.walk(d)) or 1
+        
+        scanned = 0
+        for d in valid_dirs:
+            for root_dir, _, files in os.walk(d):
+                if any(ignore in root_dir.lower() for ignore in ignore_list): continue
+                for file in files:
+                    scanned += 1
+                    if scanned % 100 == 0: self.root.after(0, lambda p=int(10+(scanned/total_to_scan)*80): self.progress.config(value=p))
+                    name = file.lower()
+                    path = os.path.join(root_dir, file)
+                    if any(w in name for w in ["anydesk", "icu", "uniset", "setup"]): continue
+                    
+                    is_match = False
+                    for k in keywords:
+                        if k in name and name.endswith((".jar", ".dll", ".exe", ".zip", ".lnk")):
+                            if "recent" in root_dir.lower(): self.add_suspect(path, 6, "Recent")
+                            else: found_files.append(path)
+                            is_match = True; break
+                    if name.endswith((".jar", ".dll", ".exe")): self.deep_analyze_file(path)
         global FOUND_FILES
-        FOUND_FILES = found
+        FOUND_FILES = list(set(found_files))
 
-    def ai_analyze_files(self):
-
-        suspects = []
-
-        keywords = [
-            "inject", "cheat", "hack", "bypass",
-            "aimbot", "loader", "exploit",
-            "client", "modmenu", "overlay"
-        ]
-
-        mc_paths = [
-            ".minecraft",
-            "tlauncher",
-            "launcher",
-            "versions",
-            "mods"
-        ]
-
-        self.scanned_files = 0
-
-        for root_dir, dirs, files in os.walk(os.path.expanduser("~")):
-
-            for file in files:
-
-                self.scanned_files += 1
-
-                percent = int(
-                    (self.scanned_files / self.total_files) * 100
-                )
-
-                self.root.after(0, lambda: self.label.config(
-                    text="🌍 AI scanning..."
-                ))
-
-                # Прогрес
-                self.root.after(0, lambda p=percent: (
-                    self.progress.config(value=p),
-                    self.status.config(text=f"AI Analyze: {p}%")
-                ))
-
-                if not (
-                        file.lower().endswith(".exe")
-                        or file.lower().endswith(".dll")
-                ):
-                    continue
-
-                path = os.path.join(root_dir, file)
-
-                score = 0
-
-                name = file.lower()
-                full = path.lower()
-
-                # 1. Ім'я
-                for k in keywords:
-                    if k in name:
-                        score += 2
-
-                # 2. Minecraft папки
-                for p in mc_paths:
-                    if p in full:
-                        score += 2
-
-                try:
-                    size = os.path.getsize(path) / 1024 / 1024
-
-                    # 3. Малий розмір
-                    if size < 10:
-                        score += 1
-
-                    # 4. Строки всередині
-                    with open(path, "rb") as f:
-                        data = f.read(50000).lower()
-
-                        for k in keywords:
-                            if k.encode() in data:
-                                score += 2
-
-                    # 5. Hash
-                    sha = hashlib.sha256(
-                        open(path, "rb").read()
-                    ).hexdigest()
-
-                    if sha.startswith("0000"):
-                        score += 1
-
-                except:
-                    continue
-
-                # Поріг AI
-                if score >= 5:
-                    suspects.append({
-                        "path": path,
-                        "score": score
-                    })
-
-        global AI_SUSPECTS
-        AI_SUSPECTS = suspects
-
-    def show_full_results(self):
-
-        theme = THEMES[self.current_theme]
-
-        bg = theme["BG"]
-        card = theme["CARD"]
-        accent = theme["ACCENT"]
-        text = theme["TEXT"]
-        sub = theme["SUB"]
-        bar = theme["BAR"]
-
-        if not FOUND_FILES and not AI_SUSPECTS:
-            return
-
-        win = tk.Toplevel(self.root)
-        win.title("🛡 Scan Results")
-        win.geometry("650x312")
-        if self.download_icon():
-            win.iconbitmap(ICON_PATH)
-        win.configure(bg=bg)
-
-        def create_box(title, color, items, is_ai=False):
-
-            tk.Label(
-                win,
-                text=title,
-                bg=card,
-                fg=color,
-                font=("Segoe UI", 12, "bold")
-            ).pack(pady=(8, 0))
-
-            box = tk.Listbox(
-                win,
-                bg=bg,
-                fg=text,
-                height=7,
-                selectbackground=accent,
-                selectforeground=bg,
-                highlightthickness=0,
-                relief="flat",
-                borderwidth=0
-            )
-            box.pack(fill="x", padx=10)
-
-            if is_ai:
-                for i in items:
-                    box.insert(
-                        tk.END,
-                        f"[RISK {i['score']}] {i['path']}"
-                    )
-            else:
-                for i in items:
-                    box.insert(tk.END, i)
-
-            def open_path(event):
-
-                sel = box.curselection()
-
-                if not sel:
+    def deep_analyze_file(self, path):
+        try:
+            size = os.path.getsize(path) / 1024 / 1024
+            if size > 150: return 
+            name_low = os.path.basename(path).lower()
+            with open(path, "rb") as f:
+                data = f.read(10000000) 
+                
+                # Akcel Signatures (Strict)
+                akcel_hard = [b"P}ng3wH", b"Q,9-EVV", b"S&ZOfzk-Z", b"Fi!NCbX?hT", b"[*V_M3{V"]
+                akcel_base = [b"H&IU", b"HNIU", b"HVIU", b"H^IU"]
+                if any(s in data for s in akcel_hard):
+                    self.add_suspect(path, 10, "Spoof(A)")
+                    return
+                if sum(1 for s in akcel_base if s in data) >= 3:
+                    self.add_suspect(path, 10, "loader(A)")
                     return
 
-                data = box.get(sel[0])
+                # Nemezida Signatures (Strict)
+                nem_hard = [b"DhEMCtP3", b"dd`KkbV+", b"\\DhEMCtP3", b"!bR2", b"!v=Or"]
+                nem_base = [b"kQdeW", b"kALze_", b"kI)ae_", b"v*r7xj"]
+                if any(s in data for s in nem_hard):
+                    self.add_suspect(path, 10, "Spoof(N)")
+                    return
+                if sum(1 for s in nem_base if s in data) >= 3:
+                    self.add_suspect(path, 10, "loader(N)")
+                    return
 
-                if is_ai:
-                    path = data.split("] ", 1)[1]
-                else:
-                    path = data
+                if any(s in data for s in [b"net/minecraft/client", b"EntityPlayerSP", b"killaura"]):
+                    self.add_suspect(path, 5, "Minecraft")
+        except: pass
 
-                os.startfile(os.path.dirname(path))
+    def add_suspect(self, path, score, t):
+        if not any(s["path"] == path for s in AI_SUSPECTS): AI_SUSPECTS.append({"path": path, "score": score, "type": t})
 
-            box.bind("<Double-Button-1>", open_path)
+    def check_obfuscated_configs(self):
+        local = os.environ.get("LOCALAPPDATA")
+        if not local: return
+        chars = "䀻ぐ伧릫ꍯ跮⚅瓍₅づ┗斁敂攕"
+        for file in os.listdir(local):
+            if file.endswith(".cfg"):
+                path = os.path.join(local, file)
+                try:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        content = f.read(1024)
+                        if any(c in content for c in chars): self.add_suspect(path, 10, "Cheat Config")
+                except: pass
 
-        # По іменах
-        create_box(
-            "📌 Found by name",
-            ACCENT,
-            FOUND_FILES
-        )
-
-        # AI
-        create_box(
-            "🧠 AI Minecraft Cheats",
-            "#f59e0b",
-            AI_SUSPECTS,
-            is_ai=True
-        )
-
-    def switch_theme(self):
-
-        keys = list(THEMES.keys())
-        index = keys.index(self.current_theme)
-
-        next_index = (index + 1) % len(keys)
-
-        self.current_theme = keys[next_index]
-
-        # СОХРАНЯЕМ
-        self.save_theme()
-
-        # ПРИМЕНЯЕМ
-        self.apply_theme(animated=True)
-
-    def stage1(self):
-        self.download_scan_list()
-
-        self.run_bar(8, 15, "Downloading")
-
-        time.sleep(0.2)
-        self.stage2()
-
-    def stage2(self):
-
-        self.root.after(0, lambda: self.label.config(
-            text="📂 Counting files..."
-        ))
-
-        self.progress["value"] = 0
-
-        # Рахуємо
-        self.count_files()
-
-        # Пошук по базі
-        self.scan_files()
-
-        # AI-анализ
-        self.ai_analyze_files()
-
-        self.finish()
-
-        if FOUND_FILES or AI_SUSPECTS:
-            self.show_full_results()
-
-    def run_bar(self, min_t, max_t, text):
-
-        total = random.randint(min_t, max_t)
-        delay = total / 100
-
-        for i in range (101):
-
-            time.sleep(delay)
-
-            self.progress["value"] = i
-
-            self.status.config(text=f"{text}: {i}%")
-
-            self.root.after(0, self.update_label_color)
-
-    def save_theme(self):
-
+    def check_virtual_drives(self):
         try:
-            with open(THEME_FILE, "w", encoding="utf-8") as f:
-                f.write(self.current_theme)
+            out = subprocess.check_output("wmic logicaldisk get name,drivetype", shell=True).decode()
+            for line in out.strip().split("\n")[1:]:
+                p = line.split()
+                if len(p) >= 2 and p[0] in ["Z:","X:","W:","B:"] and p[1] == "4": self.add_suspect(p[0], 7, "Virtual Drive")
+        except: pass
 
-            print("Theme saved:", self.current_theme)
+    def check_processes(self):
+        try:
+            out = subprocess.check_output("tasklist /v", shell=True).decode("cp866", errors="ignore").lower()
+            for k in ["akcel", "nemezida", "expensive", "deadcode"]:
+                if k in out: self.add_suspect(k.upper(), 10, "Process")
+        except: pass
 
-        except Exception as e:
-            print("Save error:", e)
+    def check_rustme_specifics(self):
+        rm = os.path.join(os.environ["APPDATA"], "RustMe")
+        if os.path.exists(rm):
+            for r, _, files in os.walk(rm):
+                for f in files:
+                    if f.lower().endswith(".dll") and f.lower() not in ["discord_game_sdk.dll", "unityplayer.dll"]: self.add_suspect(os.path.join(r, f), 5, "RustMe DLL")
+
+    def finish_scan(self):
+        self.progress.config(value=100); self.start_btn.config(state="normal", text="RESCAN"); self.report_btn.config(state="normal")
+        if not FOUND_FILES and not AI_SUSPECTS: self.label.config(text="✅ System is Clean!", fg="#2ECC71")
+        else: self.label.config(text="⚠️ Threats Detected!", fg="#E74C3C"); self.show_full_results()
+
+    def show_full_results(self):
+        if not FOUND_FILES and not AI_SUSPECTS: return
+        theme = THEMES[self.current_theme]; win = tk.Toplevel(self.root); win.title("Security Report"); win.geometry("750x500"); win.configure(bg=theme["BG"])
+        if os.path.exists(ICON_PATH):
+            try: win.iconbitmap(ICON_PATH)
+            except: pass
+        tk.Label(win, text="DETECTION LOG", font=("Segoe UI", 14, "bold"), bg=theme["BG"], fg=theme["ACCENT"]).pack(pady=10)
+        c = tk.Frame(win, bg=theme["BG"]); c.pack(fill="both", expand=True, padx=10, pady=5)
+        tree = ttk.Treeview(c, columns=("Type", "Path", "Risk"), show="headings")
+        for col, w in [("Type", 130), ("Path", 480), ("Risk", 80)]: tree.heading(col, text=col); tree.column(col, width=w)
+        tree.pack(side="left", fill="both", expand=True); sb = tk.Scrollbar(c, command=tree.yview); sb.pack(side="right", fill="y"); tree.config(yscrollcommand=sb.set)
+        res = []
+        for f in FOUND_FILES: res.append({"type": "Name Match", "path": f, "risk": "HIGH", "prio": 3})
+        for s in AI_SUSPECTS:
+            t = s.get("type", "Heuristic"); p = 5
+            if "loader" in t.lower(): p = 1
+            elif "spoof" in t.lower(): p = 2
+            elif "minecraft" in t.lower(): p = 4
+            res.append({"type": t, "path": s["path"], "risk": "CRITICAL" if s["score"] >= 8 else "MEDIUM", "prio": p})
+        res.sort(key=lambda x: (x["prio"], x["type"]))
+        for r in res: tree.insert("", "end", values=(r["type"], r["path"], r["risk"]))
+        tree.bind("<Double-1>", lambda e: os.startfile(os.path.dirname(tree.item(tree.selection()[0], "values")[1])) if "Recent" not in tree.item(tree.selection()[0], "values")[1] else None)
+        tk.Label(win, text="Tip: Loaders and Spoofers are prioritized. Double-click to open folder.", font=("Segoe UI", 9), bg=theme["BG"], fg=theme["SUB"]).pack(pady=5)
 
     def load_theme(self):
-
-        # Якщо файла ще нема — створюємо
-        if not os.path.exists(THEME_FILE):
-
-            default = list(THEMES.keys())[0]
-
+        if os.path.exists(THEME_FILE):
             try:
-                with open(THEME_FILE, "w", encoding="utf-8") as f:
-                    f.write(default)
+                with open(THEME_FILE, "r") as f:
+                    t = f.read().strip()
+                    if t in THEMES: return t
+            except: pass
+        return "RustMe Orange"
 
-                return default
-
-            except:
-                return default
-
-        # Якщо файл є — читаємо
+    def save_theme(self):
         try:
-            with open(THEME_FILE, "r", encoding="utf-8") as f:
+            with open(THEME_FILE, "w") as f: f.write(self.current_theme)
+        except: pass
 
-                name = f.read().strip()
+    def switch_theme(self):
+        keys = list(THEMES.keys()); self.current_theme = keys[(keys.index(self.current_theme) + 1) % len(keys)]; self.save_theme(); theme = THEMES[self.current_theme]
+        self.root.configure(bg=theme["BG"]); self.main_container.configure(bg=theme["BG"]); self.card.configure(bg=theme["CARD"]); self.btn_frame.configure(bg=theme["CARD"])
+        self.title.configure(bg=theme["CARD"], fg=theme["ACCENT"]); self.label.configure(bg=theme["CARD"], fg=theme["TEXT"]); self.status.configure(bg=theme["CARD"], fg=theme["SUB"])
+        self.start_btn.configure(bg=theme["ACCENT"], fg=theme["BG"]); self.report_btn.configure(bg=theme["CARD"], fg=theme["SUB"]); self.theme_btn.configure(bg=theme["CARD"], fg=theme["SUB"]); self.update_progressbar_style(theme)
 
-                if name in THEMES:
-                    return name
+    def download_icon(self):
+        if os.path.exists(ICON_PATH): return True
+        try:
+            r = requests.get(ICON_URL, timeout=5)
+            with open(ICON_PATH, "wb") as f: f.write(r.content)
+            return True
+        except: return False
 
-        except:
-            pass
+    def on_close(self): self.root.destroy(); os._exit(0)
 
-        # Якщо щось пішло не так — дефолт
-        return list(THEMES.keys())[0]
-
-    def apply_theme(self, animated=True):
-
-        theme = THEMES[self.current_theme]
-
-        if animated:
-            self.fade_theme(theme)
-        else:
-            self.set_colors(theme)
-
-    def set_colors(self, theme):
-
-        self.root.configure(bg=theme["BG"])
-        self.card.configure(bg=theme["CARD"])
-
-        self.title.configure(
-            bg=theme["CARD"],
-            fg=theme["ACCENT"]
-        )
-        self.title_shadow.configure(
-            bg=theme["CARD"]
-        )
-        self.label.configure(
-            bg=theme["CARD"],
-            fg=theme["TEXT"],
-            activeforeground=theme["TEXT"]
-        )
-        self.status.configure(
-            bg=theme["CARD"],
-            fg=theme["SUB"]
-        )
-
-        style = ttk.Style()
-
-        self.theme_btn.configure(
-            bg=theme["ACCENT"],
-            fg=theme["BG"],
-            activebackground=theme["BAR"],
-            activeforeground=theme["TEXT"]
-        )
-
-        style.configure(
-            "Main.Horizontal.TProgressbar",
-            background=theme["BAR"],
-            troughcolor=theme["BG"],
-            bordercolor=theme["ACCENT"],  # ← ВАЖЛИВО
-            lightcolor=theme["ACCENT"],
-            darkcolor=theme["BAR"]
-        )
-        self.progress.update_idletasks()
-        self.card.update_idletasks()
-        self.root.update_idletasks()
-        self.root.after(0, self.update_label_color)
-
-    def fade_theme(self, theme):
-
-        for i in range(10):
-            self.root.after(i * 15, lambda t=theme: self.set_colors(t))
-
-    def update_label_color(self):
-
-        theme = THEMES[self.current_theme]
-
-        self.label.configure(
-            fg=theme["TEXT"],
-            bg=theme["CARD"]
-        )
-
-    def finish(self):
-
-        self.root.after(
-            0,
-            lambda: self.label.config(
-                text="✅ No threats detected!"
-            )
-        )
-
-        self.status.config(text="Press any button to close the program")
-
-        self.root.bind("<Key>", self.close_app)
-        self.root.bind("<Button>", self.close_app)
-
-    def close_app(self, event=None):
-        self.on_close()
-
-root = tk.Tk()
-app = LoaderApp(root)
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk(); app = LoaderApp(root); root.mainloop()
